@@ -47,6 +47,6 @@ resource "aws_ses_identity_notification" "deliveries" {
 
 The following arguments are supported:
 
-* `identity` - (Required) The SES domain
+* `identity` - (Required) You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: `user@example.com`, `example.com`, `arn:aws:ses:us-east-1:123456789012:identity/example.com`.
 * `notification_type` - (Required) The possible values for this are: `Bounce`, `Complaint`, `Delivery`.
-* `topic_arn` - (Required) The ARN of the SNS topic to subscribe to
+* `topic_arn` - (Optional) The ARN of the SNS topic to subscribe to. If missing, forward to topic will be deleted.

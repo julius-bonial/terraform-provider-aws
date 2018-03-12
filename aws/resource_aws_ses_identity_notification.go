@@ -2,6 +2,7 @@ package aws
 
 import (
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"log"
 	"strings"
 
@@ -53,9 +54,14 @@ func resourceAwsSesNotificationSet(d *schema.ResourceData, meta interface{}) err
 
 	log.Printf("[DEBUG] Setting SES Identity Notification: %#v", setOpts)
 
-	if _, err := conn.SetIdentityNotificationTopic(setOpts); err != nil {
+	response, err := conn.SetIdentityNotificationTopic(setOpts)
+
+	if err != nil {
 		return fmt.Errorf("Error setting SES Identity Notification: %s", err)
 	}
+
+	log.Printf("response from conn.SetIdentityNotificationTopic(): %s", awsutil.Prettify(response))
+	log.Printf("err from conn.SetIdentityNotificationTopic(): %s", awsutil.Prettify(err))
 
 	return resourceAwsSesNotificationRead(d, meta)
 }
@@ -76,6 +82,9 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 	if err != nil {
 		return fmt.Errorf("Error reading SES Identity Notification: %s", err)
 	}
+
+	log.Printf("[DEBUG] SES Identity Notification response: %+v", response)
+	panic("Julius stopped execution")
 
 	notificationAttributes := response.NotificationAttributes[identity]
 	switch notification {
