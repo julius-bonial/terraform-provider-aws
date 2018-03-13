@@ -2,8 +2,9 @@ package aws
 
 import (
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/awsutil"
+	//"github.com/aws/aws-sdk-go/aws/awsutil"
 	"log"
+	"reflect"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -19,67 +20,86 @@ func resourceAwsSesNotification() *schema.Resource {
 		Delete: resourceAwsSesNotificationDelete,
 
 		Schema: map[string]*schema.Schema{
-			"topic_arn": &schema.Schema{
+			"identity": &schema.Schema{
+				Type:         schema.TypeString,
+				ForceNew:     true,
+				Required:     true,
+				ValidateFunc: validateIdentity,
+			},
+
+			"bounce_topic": &schema.Schema{
 				Type:         schema.TypeString,
 				Optional:     true,
 				ValidateFunc: validateArn,
 			},
 
-			"notification_type": &schema.Schema{
+			"complaint_topic": &schema.Schema{
 				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validateNotificationType,
+				Optional:     true,
+				ValidateFunc: validateArn,
 			},
 
-			"identity": &schema.Schema{
+			"delivery_topic": &schema.Schema{
 				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validateIdentity,
+				Optional:     true,
+				ValidateFunc: validateArn,
+			},
+
+			"forwarding_enabled": &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
 			},
 		},
 	}
 }
 
 func resourceAwsSesNotificationSet(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).sesConn
-	topic_raw, was_set := d.GetOk("topic_arn")
-	topic := topic_raw.(string)
-	sns_topic := aws.String(topic)
-	if !was_set {
-		sns_topic = nil
-	}
-	notification := d.Get("notification_type").(string)
+	topics := []string{ses.NotificationTypeBounce, ses.NotificationTypeComplaint, ses.NotificationTypeDelivery}
 	identity := d.Get("identity").(string)
+	conn := meta.(*AWSClient).sesConn
 
-	setOpts := &ses.SetIdentityNotificationTopicInput{
-		Identity:         aws.String(identity),
-		NotificationType: aws.String(notification),
-		SnsTopic:         sns_topic,
+	d.Partial(true)
+	d.SetId(identity)
+
+	for _, topic := range topics {
+		schema_name := strings.ToLower(topic) + "_topic"
+
+		if d.HasChange(schema_name) {
+			sns_topic := aws.String("")
+
+			if v, ok := d.GetOk(schema_name); ok {
+				sns_topic = aws.String(v.(string))
+			} else {
+				sns_topic = nil
+			}
+
+			setOpts := &ses.SetIdentityNotificationTopicInput{
+				Identity:         aws.String(identity),
+				NotificationType: aws.String(topic),
+				SnsTopic:         sns_topic,
+			}
+
+			log.Printf("[DEBUG] Setting SES Identity Notification: %+v", setOpts)
+
+			_, err := conn.SetIdentityNotificationTopic(setOpts)
+
+			if err != nil {
+				return fmt.Errorf("Error setting SES Identity Notification: %s", err)
+			}
+
+			d.SetPartial(schema_name)
+		}
 	}
 
-	log.Printf("[DEBUG] Setting SES Identity Notification: %+v", setOpts)
-	//panic("stop")
+	d.Partial(false)
 
-	response, err := conn.SetIdentityNotificationTopic(setOpts)
-
-	if err != nil {
-		return fmt.Errorf("Error setting SES Identity Notification: %s", err)
-	}
-
-	log.Printf("response from conn.SetIdentityNotificationTopic(): %s", awsutil.Prettify(response))
-	log.Printf("err from conn.SetIdentityNotificationTopic(): %s", awsutil.Prettify(err))
-	d.SetId(strings.Join([]string{identity, notification}, "|"))
-
-	return resourceAwsSesNotificationRead(d, meta)
+	return nil
 }
 
 func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).sesConn
-	parts := strings.Split(d.Id(), "|")
-	identity := parts[0]
-	notification := parts[1]
-	log.Printf("notification: %s", notification)
-	log.Printf("identity: %s", identity)
+	identity := d.Id()
+	topics := []string{ses.NotificationTypeBounce, ses.NotificationTypeComplaint, ses.NotificationTypeDelivery}
 
 	getOpts := &ses.GetIdentityNotificationAttributesInput{
 		Identities: []*string{aws.String(identity)},
@@ -93,25 +113,28 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 		return fmt.Errorf("Error reading SES Identity Notification: %s", err)
 	}
 	notificationAttributes := response.NotificationAttributes[identity]
+	r := reflect.ValueOf(notificationAttributes)
 
-	log.Printf("[DEBUG] terraform-data: %+v", d)
+	log.Printf("[DEBUG] notificationAttributes: %+v", notificationAttributes)
 
-	switch notification {
-	case ses.NotificationTypeBounce:
-		if err := d.Set("topic_arn", notificationAttributes.BounceTopic); err != nil {
-			return err
+	for _, topic := range topics {
+		attribute_name := topic + "Topic"
+		schema_name := strings.ToLower(topic) + "_topic"
+		topic_arn_ptr := *(reflect.Indirect(r).FieldByName(attribute_name).Addr().Interface().(**string))
+
+		if topic_arn_ptr == nil {
+			if err := d.Set(schema_name, nil); err != nil {
+				return err
+			}
+			continue
 		}
-	case ses.NotificationTypeComplaint:
-		if err := d.Set("topic_arn", notificationAttributes.ComplaintTopic); err != nil {
-			return err
-		}
-	case ses.NotificationTypeDelivery:
-		if err := d.Set("topic_arn", notificationAttributes.DeliveryTopic); err != nil {
+
+		topic_arn := *topic_arn_ptr
+
+		if err := d.Set(schema_name, topic_arn); err != nil {
 			return err
 		}
 	}
-
-	log.Printf("[DEBUG] terraform-data: %+v", d)
 
 	return nil
 }
@@ -134,16 +157,6 @@ func resourceAwsSesNotificationDelete(d *schema.ResourceData, meta interface{}) 
 	}
 
 	return resourceAwsSesNotificationRead(d, meta)
-}
-
-func validateNotificationType(v interface{}, k string) (ws []string, errors []error) {
-	value := strings.Title(strings.ToLower(v.(string)))
-	if value == "Bounce" || value == "Complaint" || value == "Delivery" {
-		return
-	}
-
-	errors = append(errors, fmt.Errorf("%q must be either %q, %q or %q", k, "Bounce", "Complaint", "Delivery"))
-	return
 }
 
 func validateIdentity(v interface{}, k string) (ws []string, errors []error) {

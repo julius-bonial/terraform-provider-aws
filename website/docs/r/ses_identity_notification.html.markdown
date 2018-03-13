@@ -23,10 +23,12 @@ Amazon SES can notify you of the status of your emails by email or through [Amaz
 You can directly supply a topic and ARN by hand in the `topic_arn` property along with the queue ARN:
 
 ```hcl
-resource "aws_ses_identity_notification" "bounces" {
-  identity          = "foobar.com"
-  notification_type = "Bounce"
-  topic_arn         = "arn:aws:sns:us-east-1:123456:ses-bounces"
+resource "aws_ses_identity_notification" "notification-config" {
+  identity           = "foobar.com"
+  bounce_topic       = "arn:aws:sns:us-east-1:123456:mail-notifications"
+  complaint_topic    = "arn:aws:sns:us-east-1:123456:mail-notifications"
+  delivery_topic     = "arn:aws:sns:us-east-1:123456:mail-notifications"
+  forwarding_enabled = false
 }
 
 resource "aws_ses_identity_notification" "complaints" {
