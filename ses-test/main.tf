@@ -19,16 +19,20 @@ resource "aws_sns_topic" "ses-notifications" {
   name = "ses-notifications"
 }
 
+resource "aws_sns_topic" "ses-notifications2" {
+  name = "ses-notifications2"
+}
+
 resource "aws_ses_identity_notification" "bounces" {
   identity          = "${var.domain}"
   notification_type = "Bounce"
-  topic_arn         = "${aws_sns_topic.ses-notifications.arn}"
+  topic_arn         = "${aws_sns_topic.ses-notifications2.arn}"
 }
 
 resource "aws_ses_identity_notification" "complaints" {
   identity          = "${var.domain}"
   notification_type = "Complaint"
-  topic_arn         = "${aws_sns_topic.ses-notifications.arn}"
+  #topic_arn         = "${aws_sns_topic.ses-notifications.arn}"
 }
 
 resource "aws_ses_identity_notification" "deliveries" {

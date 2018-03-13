@@ -42,17 +42,23 @@ func resourceAwsSesNotification() *schema.Resource {
 
 func resourceAwsSesNotificationSet(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).sesConn
-	topic := d.Get("topic_arn").(string)
+	topic_raw, was_set := d.GetOk("topic_arn")
+	topic := topic_raw.(string)
+	sns_topic := aws.String(topic)
+	if !was_set {
+		sns_topic = nil
+	}
 	notification := d.Get("notification_type").(string)
 	identity := d.Get("identity").(string)
 
 	setOpts := &ses.SetIdentityNotificationTopicInput{
 		Identity:         aws.String(identity),
 		NotificationType: aws.String(notification),
-		SnsTopic:         aws.String(topic),
+		SnsTopic:         sns_topic,
 	}
 
-	log.Printf("[DEBUG] Setting SES Identity Notification: %#v", setOpts)
+	log.Printf("[DEBUG] Setting SES Identity Notification: %+v", setOpts)
+	//panic("stop")
 
 	response, err := conn.SetIdentityNotificationTopic(setOpts)
 
@@ -62,14 +68,18 @@ func resourceAwsSesNotificationSet(d *schema.ResourceData, meta interface{}) err
 
 	log.Printf("response from conn.SetIdentityNotificationTopic(): %s", awsutil.Prettify(response))
 	log.Printf("err from conn.SetIdentityNotificationTopic(): %s", awsutil.Prettify(err))
+	d.SetId(strings.Join([]string{identity, notification}, "|"))
 
 	return resourceAwsSesNotificationRead(d, meta)
 }
 
 func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).sesConn
-	notification := d.Get("notification_type").(string)
-	identity := d.Get("identity").(string)
+	parts := strings.Split(d.Id(), "|")
+	identity := parts[0]
+	notification := parts[1]
+	log.Printf("notification: %s", notification)
+	log.Printf("identity: %s", identity)
 
 	getOpts := &ses.GetIdentityNotificationAttributesInput{
 		Identities: []*string{aws.String(identity)},
@@ -82,11 +92,10 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 	if err != nil {
 		return fmt.Errorf("Error reading SES Identity Notification: %s", err)
 	}
-
-	log.Printf("[DEBUG] SES Identity Notification response: %+v", response)
-	panic("Julius stopped execution")
-
 	notificationAttributes := response.NotificationAttributes[identity]
+
+	log.Printf("[DEBUG] terraform-data: %+v", d)
+
 	switch notification {
 	case ses.NotificationTypeBounce:
 		if err := d.Set("topic_arn", notificationAttributes.BounceTopic); err != nil {
@@ -101,6 +110,8 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 			return err
 		}
 	}
+
+	log.Printf("[DEBUG] terraform-data: %+v", d)
 
 	return nil
 }
