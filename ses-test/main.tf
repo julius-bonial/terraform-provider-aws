@@ -7,10 +7,6 @@ variable "domain" {
   default = "dev-stages.global"
 }
 
-# resource "aws_ses_domain_identity" "foo-bar" {
-#   domain = "foo-bar.global"
-# }
-
 resource "aws_ses_domain_identity" "ses" {
   domain = "${var.domain}"
 }
@@ -34,17 +30,3 @@ resource "aws_ses_identity_notification" "ses" {
   delivery_topic     = "${aws_sns_topic.ses-notifications3.arn}"
   forwarding_enabled = false
 }
-
-# resource "aws_ses_identity_notification" "complaints" {
-#   identity          = "${var.domain}"
-#   notification_type = "Complaint"
-#   #topic_arn         = "${aws_sns_topic.ses-notifications.arn}"
-# }
-# 
-# resource "aws_ses_identity_notification" "deliveries" {
-#   identity          = "${var.domain}"
-#   notification_type = "Delivery"
-#   topic_arn         = "${aws_sns_topic.ses-notifications.arn}"
-# }
-# 
-# 
