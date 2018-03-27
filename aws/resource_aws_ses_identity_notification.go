@@ -48,6 +48,7 @@ func resourceAwsSesNotification() *schema.Resource {
 			"forwarding_enabled": &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				Default:  true,
 			},
 		},
 	}
@@ -65,17 +66,16 @@ func resourceAwsSesNotificationSet(d *schema.ResourceData, meta interface{}) err
 		schema_name := strings.ToLower(topic) + "_topic"
 
 		if d.HasChange(schema_name) {
-			sns_topic := aws.String("")
+			var sns_topic *string = nil
 
 			if v, ok := d.GetOk(schema_name); ok {
-				sns_topic = aws.String(v.(string))
-			} else {
-				sns_topic = nil
+				tmp := v.(string)
+				sns_topic = &tmp
 			}
 
 			setOpts := &ses.SetIdentityNotificationTopicInput{
-				Identity:         aws.String(identity),
-				NotificationType: aws.String(topic),
+				Identity:         &identity,
+				NotificationType: &topic,
 				SnsTopic:         sns_topic,
 			}
 
@@ -91,6 +91,24 @@ func resourceAwsSesNotificationSet(d *schema.ResourceData, meta interface{}) err
 		}
 	}
 
+	if d.HasChange("forwarding_enabled") {
+		forward_enabled := d.Get("forwarding_enabled").(bool)
+		setOpts := &ses.SetIdentityFeedbackForwardingEnabledInput{
+			Identity:          &identity,
+			ForwardingEnabled: &forward_enabled,
+		}
+
+		log.Printf("[DEBUG] Setting SES Feedback Forwarding: %+v", setOpts)
+
+		_, err := conn.SetIdentityFeedbackForwardingEnabled(setOpts)
+
+		if err != nil {
+			return fmt.Errorf("Error setting SES Identity Notification: %s", err)
+		}
+
+		d.SetPartial("forwarding_enabled")
+	}
+
 	d.Partial(false)
 
 	return nil
@@ -100,6 +118,23 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 	conn := meta.(*AWSClient).sesConn
 	identity := d.Id()
 	topics := []string{ses.NotificationTypeBounce, ses.NotificationTypeComplaint, ses.NotificationTypeDelivery}
+
+	if !d.Get("forwarding_enabled").(bool) {
+		bounce_topic, ok := d.GetOk("bounce_topic")
+		bounce_old, bounce_new := d.GetChange("bounce_topic")
+		log.Printf("[JULIUS] bounce_topic: %#v", bounce_topic)
+		log.Printf("[JULIUS] ok: %#v", ok)
+		log.Printf("[JULIUS] bounce_old: %#v", bounce_old)
+		log.Printf("[JULIUS] bounce_new: %#v", bounce_new)
+		panic("stop")
+
+		if _, ok := d.GetOk("bounce_topic"); !ok {
+			return fmt.Errorf("You need to provivde 'bounce_topic' when setting 'forwarding_enabled' to false")
+		}
+		if _, ok := d.GetOk("complaint_topic"); !ok {
+			return fmt.Errorf("You need to provivde 'complaint_topic' when setting 'forwarding_enabled' to false")
+		}
+	}
 
 	getOpts := &ses.GetIdentityNotificationAttributesInput{
 		Identities: []*string{aws.String(identity)},
@@ -134,6 +169,10 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 		if err := d.Set(schema_name, topic_arn); err != nil {
 			return err
 		}
+	}
+
+	if err := d.Set("forwarding_enabled", notificationAttributes.ForwardingEnabled); err != nil {
+		return err
 	}
 
 	return nil

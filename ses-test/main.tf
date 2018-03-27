@@ -25,8 +25,9 @@ resource "aws_sns_topic" "ses-notifications3" {
 
 resource "aws_ses_identity_notification" "ses" {
   identity           = "${var.domain}"
-  bounce_topic       = "${aws_sns_topic.ses-notifications.arn}"
-  complaint_topic    = "${aws_sns_topic.ses-notifications2.arn}"
+  #bounce_topic       = "${aws_sns_topic.ses-notifications.arn}"
+  #complaint_topic    = "${aws_sns_topic.ses-notifications2.arn}"
   delivery_topic     = "${aws_sns_topic.ses-notifications3.arn}"
+  #forwarding_enabled = true
   forwarding_enabled = false
 }
