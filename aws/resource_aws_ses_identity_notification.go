@@ -2,7 +2,6 @@ package aws
 
 import (
 	"fmt"
-	//"github.com/aws/aws-sdk-go/aws/awsutil"
 	"log"
 	"reflect"
 	"strings"
@@ -18,6 +17,24 @@ func resourceAwsSesNotification() *schema.Resource {
 		Read:   resourceAwsSesNotificationRead,
 		Update: resourceAwsSesNotificationSet,
 		Delete: resourceAwsSesNotificationDelete,
+		/*
+			CustomizeDiff: customdiff.All(
+				customdiff.ValidateChange("size", func(old, new, meta interface{}) error {
+					// If we are increasing "size" then the new value must be
+					// a multiple of the old value.
+					log.Printf("[DEBUG] old: %#v", old)
+					log.Printf("[DEBUG] new: %#v", new)
+					panic("stop2")
+					if new.(int) <= old.(int) {
+						return nil
+					}
+					if (new.(int) % old.(int)) != 0 {
+						return fmt.Errorf("new size value must be an integer multiple of old value %d", old.(int))
+					}
+					return nil
+				}),
+			),
+		*/
 
 		Schema: map[string]*schema.Schema{
 			"identity": &schema.Schema{
@@ -118,23 +135,6 @@ func resourceAwsSesNotificationRead(d *schema.ResourceData, meta interface{}) er
 	conn := meta.(*AWSClient).sesConn
 	identity := d.Id()
 	topics := []string{ses.NotificationTypeBounce, ses.NotificationTypeComplaint, ses.NotificationTypeDelivery}
-
-	if !d.Get("forwarding_enabled").(bool) {
-		bounce_topic, ok := d.GetOk("bounce_topic")
-		bounce_old, bounce_new := d.GetChange("bounce_topic")
-		log.Printf("[JULIUS] bounce_topic: %#v", bounce_topic)
-		log.Printf("[JULIUS] ok: %#v", ok)
-		log.Printf("[JULIUS] bounce_old: %#v", bounce_old)
-		log.Printf("[JULIUS] bounce_new: %#v", bounce_new)
-		panic("stop")
-
-		if _, ok := d.GetOk("bounce_topic"); !ok {
-			return fmt.Errorf("You need to provivde 'bounce_topic' when setting 'forwarding_enabled' to false")
-		}
-		if _, ok := d.GetOk("complaint_topic"); !ok {
-			return fmt.Errorf("You need to provivde 'complaint_topic' when setting 'forwarding_enabled' to false")
-		}
-	}
 
 	getOpts := &ses.GetIdentityNotificationAttributesInput{
 		Identities: []*string{aws.String(identity)},
